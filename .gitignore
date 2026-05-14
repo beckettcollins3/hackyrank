@@ -36,3 +36,6 @@ frontend/ios/DerivedData/
 # Misc
 .cache/
 coverage/
+
+# Vercel
+.vercel/

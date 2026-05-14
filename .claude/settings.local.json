@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__list_organizations",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__list_projects",
+      "mcp__6e97b8b6-10b0-401b-849a-3bff4221d418__list_teams",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__get_cost",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__confirm_cost",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__get_project_url",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__get_publishable_keys",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__list_tables",
+      "mcp__c0cade55-42a7-4a2a-b2b5-80670785ff26__get_advisors",
+      "mcp__6e97b8b6-10b0-401b-849a-3bff4221d418__list_projects"
+    ]
+  }
+}

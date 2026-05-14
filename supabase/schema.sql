@@ -17,7 +17,7 @@ create table if not exists public.users (
   avatar_url text,
   bio text,
   skill_score int not null default 0,
-  rank_tier text not null default 'Bronze',
+  rank_tier text not null default 'Beginner',
   created_at timestamptz not null default now()
 );
 
@@ -68,11 +68,12 @@ create index if not exists followers_following_idx on public.followers(following
 create or replace function public.compute_rank_tier(score int)
 returns text language sql immutable as $$
   select case
-    when score >= 5000 then 'Diamond'
-    when score >= 2000 then 'Platinum'
-    when score >= 750  then 'Gold'
-    when score >= 200  then 'Silver'
-    else 'Bronze'
+    when score >= 15000 then 'Legend'
+    when score >= 5000  then 'Elite'
+    when score >= 1500  then 'Pro Footbagger'
+    when score >= 500   then 'Freestyler'
+    when score >= 100   then 'Street Juggler'
+    else 'Beginner'
   end;
 $$;
 

@@ -3,11 +3,12 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 const TIER_BADGE = {
-  Diamond: "bg-cyan-500/20 border-cyan-400 text-cyan-200",
-  Platinum: "bg-slate-300/20 border-slate-200 text-slate-100",
-  Gold: "bg-yellow-500/20 border-yellow-400 text-yellow-200",
-  Silver: "bg-zinc-400/20 border-zinc-300 text-zinc-100",
-  Bronze: "bg-amber-700/20 border-amber-500 text-amber-200",
+  Legend: "bg-fuchsia-500/20 border-fuchsia-400 text-fuchsia-200",
+  Elite: "bg-cyan-500/20 border-cyan-400 text-cyan-200",
+  "Pro Footbagger": "bg-yellow-500/20 border-yellow-400 text-yellow-200",
+  Freestyler: "bg-emerald-500/20 border-emerald-400 text-emerald-200",
+  "Street Juggler": "bg-sky-500/20 border-sky-400 text-sky-200",
+  Beginner: "bg-zinc-500/20 border-zinc-400 text-zinc-200",
 };
 
 export default function Leaderboard() {
