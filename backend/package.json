@@ -1,0 +1,6 @@
+{
+  "name": "hackyrank-backend-deprecated",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Deprecated. App now talks to Supabase directly."
+}
