@@ -1,6 +1,7 @@
 {
-  "name": "hackyrank-backend-deprecated",
+  "name": "hackyrank-backend-noop",
   "private": true,
-  "version": "0.0.0",
-  "description": "Deprecated. App now talks to Supabase directly."
+  "version": "0.0.1",
+  "description": "No-op handler. Real data lives in Supabase.",
+  "main": "server.js"
 }

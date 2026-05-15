@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
+import InitErrorBanner from "./InitErrorBanner";
 
 export default function Layout() {
   const { session, profile, signOut } = useAuth();
@@ -12,6 +13,7 @@ export default function Layout() {
 
   return (
     <div className="bg-black text-white min-h-screen flex flex-col">
+      <InitErrorBanner />
       <header className="sticky top-0 z-30 bg-black/80 backdrop-blur border-b border-gray-800">
         <div className="max-w-3xl mx-auto px-3 py-2 flex items-center gap-2">
           <NavLink to="/" className="font-bold tracking-tight mr-2">
