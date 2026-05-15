@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
+import AuthShell from "../components/AuthShell";
 
 export default function Signup() {
   const { signUp } = useAuth();
@@ -31,27 +32,46 @@ export default function Signup() {
     if (data.session) {
       navigate("/", { replace: true });
     } else {
-      setMsg("Check your email to confirm your account, then log in.");
+      setMsg("Check your inbox to confirm, then log in.");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white px-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm bg-zinc-900/60 border border-gray-800 rounded-xl p-6 flex flex-col gap-3"
-      >
-        <h1 className="text-xl font-bold mb-1">Create your HackyRank account</h1>
-
-        <input
-          type="text"
-          placeholder="Username"
-          autoComplete="username"
-          required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="p-2 rounded bg-zinc-800 border border-gray-700 focus:outline-none focus:border-red-500"
-        />
+    <AuthShell
+      title={
+        <>
+          Make your name on the
+          <br />
+          <span className="bg-gradient-to-r from-electric-400 via-neon-400 to-hot bg-clip-text text-transparent">
+            HackyRank board.
+          </span>
+        </>
+      }
+      subtitle="Sign up to upload clips, get ranked, and earn tier badges."
+      footer={
+        <>
+          Already got an account?{" "}
+          <Link to="/login" className="text-electric-400 font-semibold">
+            Log in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-3">
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-500">
+            @
+          </span>
+          <input
+            type="text"
+            placeholder="username"
+            autoComplete="username"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full h-12 pl-8 pr-4 rounded-2xl bg-graphite-800/70 border border-white/8 placeholder:text-ink-500 focus:outline-none focus:border-electric-400/60"
+          />
+        </div>
         <input
           type="email"
           placeholder="Email"
@@ -59,7 +79,7 @@ export default function Signup() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="p-2 rounded bg-zinc-800 border border-gray-700 focus:outline-none focus:border-red-500"
+          className="w-full h-12 px-4 rounded-2xl bg-graphite-800/70 border border-white/8 placeholder:text-ink-500 focus:outline-none focus:border-electric-400/60"
         />
         <input
           type="password"
@@ -69,26 +89,17 @@ export default function Signup() {
           minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="p-2 rounded bg-zinc-800 border border-gray-700 focus:outline-none focus:border-red-500"
+          className="w-full h-12 px-4 rounded-2xl bg-graphite-800/70 border border-white/8 placeholder:text-ink-500 focus:outline-none focus:border-electric-400/60"
         />
-
-        {err && <p className="text-red-400 text-sm">{err}</p>}
-        {msg && <p className="text-green-400 text-sm">{msg}</p>}
-
+        {err && <p className="text-hot text-sm">{err}</p>}
+        {msg && <p className="text-neon-400 text-sm">{msg}</p>}
         <button
           disabled={loading}
-          className="bg-red-500 hover:bg-red-600 disabled:opacity-50 px-4 py-2 rounded"
+          className="w-full h-12 rounded-2xl bg-gradient-electric text-graphite-900 font-bold shadow-glow disabled:opacity-60 active:scale-[0.99] transition"
         >
-          {loading ? "Creating…" : "Sign up"}
+          {loading ? "Creating…" : "Create account"}
         </button>
-
-        <p className="text-sm text-gray-400 mt-2">
-          Already have an account?{" "}
-          <Link to="/login" className="text-red-400 hover:underline">
-            Log in
-          </Link>
-        </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }

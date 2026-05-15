@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import VideoCard from "../components/VideoCard";
+import { VideoSkeleton } from "../components/Skeleton";
+import { Flame, Sparkles } from "lucide-react";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 export default function Feed() {
   const { user } = useAuth();
@@ -11,17 +13,39 @@ export default function Feed() {
   const [likedIds, setLikedIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [muted, setMuted] = useState(true);
+  const [tab, setTab] = useState("foryou"); // "foryou" | "following"
+  const scrollerRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
-    const { data, error } = await supabase
+
+    let q = supabase
       .from("videos")
       .select(
         "id, user_id, video_url, caption, likes_count, comments_count, created_at, users:users!videos_user_id_fkey(id, username, avatar_url, rank_tier)"
       )
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE);
+
+    if (tab === "following" && user) {
+      const { data: f } = await supabase
+        .from("followers")
+        .select("following_id")
+        .eq("follower_id", user.id);
+      const ids = (f ?? []).map((r) => r.following_id);
+      if (ids.length === 0) {
+        setVideos([]);
+        setLikedIds(new Set());
+        setLoading(false);
+        return;
+      }
+      q = q.in("user_id", ids);
+    }
+
+    const { data, error } = await q;
 
     if (error) {
       setErr(error.message);
@@ -31,7 +55,7 @@ export default function Feed() {
 
     setVideos(data ?? []);
 
-    if (user && data && data.length) {
+    if (user && data?.length) {
       const ids = data.map((v) => v.id);
       const { data: myLikes } = await supabase
         .from("likes")
@@ -43,11 +67,31 @@ export default function Feed() {
       setLikedIds(new Set());
     }
     setLoading(false);
-  }, [user]);
+  }, [user, tab]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Track which video is the active one via scroll
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root) return;
+    const items = Array.from(root.querySelectorAll("[data-feed-item]"));
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio > 0.7) {
+            const idx = Number(e.target.getAttribute("data-idx"));
+            setActiveIdx(idx);
+          }
+        }
+      },
+      { root, threshold: [0.7] }
+    );
+    items.forEach((i) => obs.observe(i));
+    return () => obs.disconnect();
+  }, [videos]);
 
   const toggleLike = async (video) => {
     if (!user) {
@@ -55,8 +99,6 @@ export default function Feed() {
       return;
     }
     const already = likedIds.has(video.id);
-
-    // Optimistic update
     setLikedIds((prev) => {
       const next = new Set(prev);
       already ? next.delete(video.id) : next.add(video.id);
@@ -69,62 +111,103 @@ export default function Feed() {
           : v
       )
     );
-
-    if (already) {
-      const { error } = await supabase
-        .from("likes")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("video_id", video.id);
-      if (error) load();
-    } else {
-      const { error } = await supabase
-        .from("likes")
-        .insert({ user_id: user.id, video_id: video.id });
-      if (error) load();
-    }
+    const op = already
+      ? supabase
+          .from("likes")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("video_id", video.id)
+      : supabase
+          .from("likes")
+          .insert({ user_id: user.id, video_id: video.id });
+    const { error } = await op;
+    if (error) load();
   };
 
-  if (loading) {
-    return (
-      <div className="h-[calc(100vh-56px)] flex items-center justify-center text-gray-400">
-        Loading feed…
+  return (
+    <div className="relative">
+      {/* Top floating segmented tabs */}
+      <div className="absolute top-0 inset-x-0 z-20 pt-[max(env(safe-area-inset-top),10px)] pb-2 pointer-events-none">
+        <div className="mx-auto max-w-md flex items-center justify-center gap-5 text-sm font-semibold pointer-events-auto">
+          <button
+            onClick={() => setTab("following")}
+            className={`flex items-center gap-1 ${
+              tab === "following" ? "text-white" : "text-white/60"
+            }`}
+          >
+            <Sparkles className="size-4" /> Following
+          </button>
+          <span className="size-1 rounded-full bg-white/30" />
+          <button
+            onClick={() => setTab("foryou")}
+            className={`flex items-center gap-1 ${
+              tab === "foryou" ? "text-white" : "text-white/60"
+            }`}
+          >
+            <Flame className="size-4 text-hot" /> For You
+          </button>
+        </div>
+        {/* underline */}
+        <div className="mx-auto mt-1 h-0.5 w-10 rounded-full bg-white shadow-glow pointer-events-none"
+             style={{ marginLeft: tab === "foryou" ? "calc(50% + 24px)" : "calc(50% - 64px)" }} />
       </div>
-    );
-  }
 
-  if (err) {
-    return (
-      <div className="p-6 text-red-400">
-        Couldn’t load feed: {err}
-        <p className="text-gray-500 text-sm mt-2">
-          Did you run <code>supabase/schema.sql</code> and set the env vars?
+      {loading ? (
+        <VideoSkeleton />
+      ) : err ? (
+        <div className="h-[100dvh] grid place-items-center p-6 text-center text-ink-50">
+          <div>
+            <p className="text-hot font-semibold mb-1">Feed unavailable</p>
+            <p className="text-sm text-ink-400">{err}</p>
+          </div>
+        </div>
+      ) : videos.length === 0 ? (
+        <EmptyFeed tab={tab} />
+      ) : (
+        <div
+          ref={scrollerRef}
+          className="feed-scroller h-[100dvh] overflow-y-scroll"
+        >
+          {videos.map((v, i) => (
+            <div key={v.id} data-feed-item data-idx={i}>
+              <VideoCard
+                video={v}
+                liked={likedIds.has(v.id)}
+                onLike={() => toggleLike(v)}
+                active={i === activeIdx}
+                muted={muted}
+                setMuted={setMuted}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyFeed({ tab }) {
+  return (
+    <div className="h-[100dvh] grid place-items-center p-6 text-center">
+      <div className="space-y-4">
+        <div className="mx-auto size-20 rounded-3xl bg-gradient-electric grid place-items-center shadow-glow">
+          <Flame className="size-9 text-graphite-900" />
+        </div>
+        <h2 className="text-2xl font-display font-bold">
+          {tab === "following" ? "Nobody you follow yet" : "No clips yet"}
+        </h2>
+        <p className="text-ink-400 text-sm max-w-xs mx-auto">
+          {tab === "following"
+            ? "Find creators on Explore and tap Follow."
+            : "Be the first to drop a clip and start the leaderboard."}
         </p>
-      </div>
-    );
-  }
-
-  if (!videos.length) {
-    return (
-      <div className="h-[calc(100vh-56px)] flex flex-col items-center justify-center text-gray-400 gap-3">
-        <p>No clips yet. Be the first to post.</p>
-        <a href="/upload" className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded">
-          Upload a clip
+        <a
+          href="/upload"
+          className="inline-flex px-5 py-2.5 rounded-full bg-gradient-electric text-graphite-900 font-bold shadow-glow active:scale-95"
+        >
+          Upload your first clip
         </a>
       </div>
-    );
-  }
-
-  return (
-    <div className="h-[calc(100vh-56px)] overflow-y-scroll snap-y snap-mandatory">
-      {videos.map((v) => (
-        <VideoCard
-          key={v.id}
-          video={v}
-          liked={likedIds.has(v.id)}
-          onLike={() => toggleLike(v)}
-        />
-      ))}
     </div>
   );
 }

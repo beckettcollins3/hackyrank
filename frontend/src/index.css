@@ -2,25 +2,138 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------- Base ---------- */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
-  background: black;
-  color: white;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  background: #0a0a0f;
+  color: #ffffff;
+  font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Display",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
 }
 
-button {
-  -webkit-tap-highlight-color: transparent;
+body {
+  background:
+    radial-gradient(900px 600px at 20% -10%, rgba(0, 217, 255, 0.08), transparent 60%),
+    radial-gradient(700px 500px at 110% 10%, rgba(0, 255, 148, 0.06), transparent 60%),
+    #0a0a0f;
+  background-attachment: fixed;
 }
 
-/* Hide default scrollbar in feed for a cleaner TikTok-style look */
+button {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ---------- Safe areas (iOS notch / home indicator) ---------- */
+@layer utilities {
+  .safe-pt {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-pb {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-pl {
+    padding-left: env(safe-area-inset-left);
+  }
+  .safe-pr {
+    padding-right: env(safe-area-inset-right);
+  }
+  .safe-mb {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+  .pb-tabbar {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
+  }
+}
+
+/* ---------- Glass surfaces ---------- */
+@layer utilities {
+  .glass {
+    background: rgba(20, 20, 28, 0.55);
+    backdrop-filter: saturate(160%) blur(20px);
+    -webkit-backdrop-filter: saturate(160%) blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .glass-strong {
+    background: rgba(10, 10, 15, 0.75);
+    backdrop-filter: saturate(180%) blur(28px);
+    -webkit-backdrop-filter: saturate(180%) blur(28px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .glass-pill {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .ring-tier {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06),
+      0 0 0 4px rgba(0, 217, 255, 0.6);
+  }
+}
+
+/* ---------- Shimmer skeleton ---------- */
+@layer utilities {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+/* ---------- Snap feed scroll ---------- */
 .snap-y::-webkit-scrollbar {
   display: none;
+}
+.feed-scroller {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+}
+.feed-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- Selection ---------- */
+::selection {
+  background: rgba(0, 217, 255, 0.4);
+  color: #fff;
+}
+
+/* ---------- Hide native video controls everywhere ---------- */
+video::-webkit-media-controls {
+  display: none !important;
 }

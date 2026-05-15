@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
+import AuthShell from "../components/AuthShell";
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -27,13 +28,19 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white px-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm bg-zinc-900/60 border border-gray-800 rounded-xl p-6 flex flex-col gap-3"
-      >
-        <h1 className="text-xl font-bold mb-1">Log in to HackyRank</h1>
-
+    <AuthShell
+      title="Welcome back."
+      subtitle="Log in to drop new clips and climb the leaderboard."
+      footer={
+        <>
+          New here?{" "}
+          <Link to="/signup" className="text-electric-400 font-semibold">
+            Create account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-3">
         <input
           type="email"
           placeholder="Email"
@@ -41,7 +48,7 @@ export default function Login() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="p-2 rounded bg-zinc-800 border border-gray-700 focus:outline-none focus:border-red-500"
+          className="w-full h-12 px-4 rounded-2xl bg-graphite-800/70 border border-white/8 placeholder:text-ink-500 focus:outline-none focus:border-electric-400/60"
         />
         <input
           type="password"
@@ -50,25 +57,16 @@ export default function Login() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="p-2 rounded bg-zinc-800 border border-gray-700 focus:outline-none focus:border-red-500"
+          className="w-full h-12 px-4 rounded-2xl bg-graphite-800/70 border border-white/8 placeholder:text-ink-500 focus:outline-none focus:border-electric-400/60"
         />
-
-        {err && <p className="text-red-400 text-sm">{err}</p>}
-
+        {err && <p className="text-hot text-sm">{err}</p>}
         <button
           disabled={loading}
-          className="bg-red-500 hover:bg-red-600 disabled:opacity-50 px-4 py-2 rounded"
+          className="w-full h-12 rounded-2xl bg-gradient-electric text-graphite-900 font-bold shadow-glow disabled:opacity-60 active:scale-[0.99] transition"
         >
           {loading ? "Logging in…" : "Log in"}
         </button>
-
-        <p className="text-sm text-gray-400 mt-2">
-          No account?{" "}
-          <Link to="/signup" className="text-red-400 hover:underline">
-            Sign up
-          </Link>
-        </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }
