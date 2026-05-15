@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import Avatar from "./Avatar";
 import { Send, X } from "lucide-react";
+import { isDemo, commentsFor } from "../demo/seed";
 
 function timeAgo(iso) {
   const t = new Date(iso).getTime();
@@ -16,15 +17,21 @@ function timeAgo(iso) {
   return `${d}d`;
 }
 
-export default function Comments({ videoId, onClose }) {
+export default function Comments({ videoId, fallbackVideo, onClose }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const demoMode = isDemo(videoId);
 
   const load = useCallback(async () => {
     setLoading(true);
+    if (demoMode) {
+      setItems(commentsFor(videoId));
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from("comments")
       .select(
@@ -35,7 +42,7 @@ export default function Comments({ videoId, onClose }) {
       .limit(100);
     setItems(data ?? []);
     setLoading(false);
-  }, [videoId]);
+  }, [videoId, demoMode]);
 
   useEffect(() => {
     load();
@@ -43,15 +50,30 @@ export default function Comments({ videoId, onClose }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!user) {
+    if (!user && !demoMode) {
       window.location.href = "/login";
       return;
     }
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    if (demoMode) {
+      // Optimistic, local-only
+      setText("");
+      setItems((prev) => [
+        {
+          id: `local-${Date.now()}`,
+          text: trimmed,
+          created_at: new Date().toISOString(),
+          users: { username: "you", avatar_url: null, rank_tier: null },
+        },
+        ...prev,
+      ]);
+      return;
+    }
+
     setPosting(true);
     setText("");
-    // Optimistic
     const tmpId = `tmp-${Date.now()}`;
     setItems((prev) => [
       {
@@ -67,7 +89,6 @@ export default function Comments({ videoId, onClose }) {
       .insert({ user_id: user.id, video_id: videoId, text: trimmed });
     setPosting(false);
     if (error) {
-      // Rollback
       setItems((prev) => prev.filter((c) => c.id !== tmpId));
     } else {
       load();
@@ -125,9 +146,7 @@ export default function Comments({ videoId, onClose }) {
                       {timeAgo(c.created_at)}
                     </span>
                   </div>
-                  <p className="text-sm text-ink-50/95 break-words">
-                    {c.text}
-                  </p>
+                  <p className="text-sm text-ink-50/95 break-words">{c.text}</p>
                 </div>
               </div>
             ))
@@ -140,14 +159,14 @@ export default function Comments({ videoId, onClose }) {
         >
           <input
             type="text"
-            placeholder={user ? "Add a comment…" : "Log in to comment"}
+            placeholder={user || demoMode ? "Add a comment…" : "Log in to comment"}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            disabled={!user || posting}
+            disabled={(!user && !demoMode) || posting}
             className="flex-1 px-4 h-10 rounded-full bg-graphite-700 border border-white/5 placeholder:text-ink-400 focus:outline-none focus:border-electric-400/60 disabled:opacity-60"
           />
           <button
-            disabled={!user || posting || !text.trim()}
+            disabled={(!user && !demoMode) || posting || !text.trim()}
             className="size-10 grid place-items-center rounded-full bg-gradient-electric text-graphite-900 disabled:opacity-40 active:scale-95"
             aria-label="Post comment"
           >

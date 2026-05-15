@@ -4,12 +4,15 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import TopBar from "../components/TopBar";
 import { CloudUpload, Film, X, Hash, CheckCircle2 } from "lucide-react";
+import { useToast } from "../lib/ToastContext";
+import * as haptics from "../lib/haptics";
 
 const MAX_BYTES = 80 * 1024 * 1024; // 80 MB
 
 export default function Upload() {
   const { user, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const inputRef = useRef(null);
 
   const [file, setFile] = useState(null);
@@ -124,10 +127,13 @@ export default function Upload() {
 
       setProgress(100);
       setDone(true);
+      haptics.success();
+      toast("Clip posted · +5 XP", { kind: "xp" });
       await refreshProfile();
       setTimeout(() => navigate("/"), 1100);
     } catch (e2) {
       setErr(e2.message || "Upload failed.");
+      toast(e2.message || "Upload failed", { kind: "error" });
     } finally {
       setBusy(false);
     }

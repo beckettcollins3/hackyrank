@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, MessageCircle, UserPlus, Trophy } from "lucide-react";
+import { Heart, MessageCircle, UserPlus, Trophy, Sparkles } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import TopBar from "../components/TopBar";
 import Avatar from "../components/Avatar";
 import { RowSkeleton } from "../components/Skeleton";
+import { DEMO_NOTIFICATIONS, mixDemo } from "../demo/seed";
 
 function timeAgo(iso) {
   const t = new Date(iso).getTime();
@@ -26,12 +27,16 @@ export default function Notifications() {
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      // Show demo only
+      setEvents(DEMO_NOTIFICATIONS.map((n) => ({ ...n, when: n.when })));
+      setLoading(false);
+      return;
+    }
     (async () => {
       setLoading(true);
       setErr("");
 
-      // My videos (so we can collect notifications about them)
       const { data: myVids } = await supabase
         .from("videos")
         .select("id, caption, video_url")
@@ -70,7 +75,7 @@ export default function Notifications() {
           .limit(30),
       ]);
 
-      const all = [
+      const real = [
         ...(likes.data ?? []).map((x) => ({
           type: "like",
           id: `l-${x.id}`,
@@ -94,6 +99,7 @@ export default function Notifications() {
         })),
       ];
 
+      const all = mixDemo(real, DEMO_NOTIFICATIONS, 25);
       all.sort((a, b) => new Date(b.when) - new Date(a.when));
       setEvents(all);
       setLoading(false);
@@ -103,26 +109,34 @@ export default function Notifications() {
     });
   }, [user]);
 
-  if (!user) {
-    return (
-      <>
-        <TopBar title="Notifications" back />
-        <div className="max-w-md mx-auto p-6">
-          <p className="text-ink-400">
-            <Link to="/login" className="text-electric-400 underline">
-              Log in
-            </Link>{" "}
-            to see your activity.
-          </p>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <TopBar title="Notifications" back />
       <div className="max-w-md mx-auto px-4 pt-2 mb-6">
+        {/* System events banner */}
+        <div className="rounded-2xl glass p-3 flex items-center gap-3 mb-3">
+          <div className="size-10 rounded-xl bg-gradient-neon grid place-items-center shadow-glow-neon">
+            <Trophy className="size-5 text-graphite-900" strokeWidth={3} />
+          </div>
+          <div>
+            <div className="font-semibold">You climbed a rank this week!</div>
+            <div className="text-xs text-ink-400">
+              Keep posting to lock in your tier.
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl glass p-3 flex items-center gap-3 mb-4">
+          <div className="size-10 rounded-xl bg-gradient-hot grid place-items-center shadow-glow-hot">
+            <Sparkles className="size-5 text-graphite-900" strokeWidth={3} />
+          </div>
+          <div>
+            <div className="font-semibold">Trending in Virginia</div>
+            <div className="text-xs text-ink-400">
+              @kicker just dropped a Legend-tier combo.
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <RowSkeleton count={6} />
         ) : err ? (
@@ -132,7 +146,7 @@ export default function Notifications() {
             <Trophy className="mx-auto size-9 text-ink-400 mb-2" />
             <p className="font-semibold">Quiet for now</p>
             <p className="text-ink-400 text-sm mt-1">
-              When people like, comment on, or follow you, you'll see it here.
+              When people like, comment, or follow you, you'll see it here.
             </p>
           </div>
         ) : (
@@ -141,6 +155,14 @@ export default function Notifications() {
               <EventRow key={ev.id} ev={ev} />
             ))}
           </ul>
+        )}
+        {!user && (
+          <Link
+            to="/login"
+            className="block mt-4 text-center text-sm text-electric-400 underline"
+          >
+            Log in to see your real activity
+          </Link>
         )}
       </div>
     </>

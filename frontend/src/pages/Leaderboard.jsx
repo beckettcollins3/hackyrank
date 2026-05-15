@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Crown, Trophy, Flame } from "lucide-react";
+import { Crown, Trophy, Flame, MapPin, Zap } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import Avatar from "../components/Avatar";
 import TierBadge from "../components/TierBadge";
@@ -8,16 +8,19 @@ import TopBar from "../components/TopBar";
 import { RowSkeleton } from "../components/Skeleton";
 import { tierStyle } from "../lib/tiers";
 import { useAuth } from "../lib/AuthContext";
+import { DEMO_USERS, mixDemo, COMMUNITIES } from "../demo/seed";
 
 const TABS = [
   { key: "global", label: "Global" },
   { key: "weekly", label: "Weekly" },
+  { key: "local",  label: "Local"  },
   { key: "friends", label: "Friends" },
 ];
 
 export default function Leaderboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState("global");
+  const [community, setCommunity] = useState(COMMUNITIES[0]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -29,9 +32,6 @@ export default function Leaderboard() {
       setErr("");
 
       if (tab === "weekly") {
-        // Approximate weekly ranking: sum likes received on videos created in
-        // the last 7 days. This is computed client-side from views the user
-        // can already read under RLS, so no extra schema is needed.
         const since = new Date(
           Date.now() - 7 * 24 * 60 * 60 * 1000
         ).toISOString();
@@ -61,10 +61,15 @@ export default function Leaderboard() {
           cur.skill_score += score;
           map.set(u.id, cur);
         }
-        const arr = [...map.values()].sort(
-          (a, b) => b.skill_score - a.skill_score
-        );
-        setUsers(arr.slice(0, 100));
+        const real = [...map.values()];
+        // Add demo "weekly" scores proportional to their score so the board is lively
+        const demoWeekly = DEMO_USERS.map((u) => ({
+          ...u,
+          skill_score: Math.max(20, Math.floor(u.skill_score / 14 + Math.random() * 60)),
+        }));
+        const all = mixDemo(real, demoWeekly, 50);
+        all.sort((a, b) => b.skill_score - a.skill_score);
+        setUsers(all);
         setLoading(false);
         return;
       }
@@ -76,11 +81,6 @@ export default function Leaderboard() {
           .eq("follower_id", user.id);
         const ids = (f ?? []).map((r) => r.following_id);
         const allIds = [...new Set([user.id, ...ids])];
-        if (allIds.length === 0) {
-          setUsers([]);
-          setLoading(false);
-          return;
-        }
         const { data, error } = await supabase
           .from("users")
           .select("id, username, avatar_url, skill_score, rank_tier")
@@ -92,7 +92,26 @@ export default function Leaderboard() {
           setLoading(false);
           return;
         }
-        setUsers(data ?? []);
+        // Pad with a couple of demo "friends" so the board never reads as one row
+        const filler = DEMO_USERS.slice(0, 4);
+        setUsers(mixDemo(data ?? [], filler, 30));
+        setLoading(false);
+        return;
+      }
+
+      if (tab === "local") {
+        const filtered = DEMO_USERS.filter(
+          (u) => u.region === community.region
+        ).sort((a, b) => b.skill_score - a.skill_score);
+        // Global users (real) don't have region, but include them too for now
+        const { data } = await supabase
+          .from("users")
+          .select("id, username, avatar_url, skill_score, rank_tier")
+          .order("skill_score", { ascending: false })
+          .limit(50);
+        const all = mixDemo(filtered, data ?? [], 50);
+        all.sort((a, b) => b.skill_score - a.skill_score);
+        setUsers(all);
         setLoading(false);
         return;
       }
@@ -105,24 +124,39 @@ export default function Leaderboard() {
         .limit(100);
       if (cancelled) return;
       if (error) setErr(error.message);
-      setUsers(data ?? []);
+      const merged = mixDemo(data ?? [], DEMO_USERS, 50);
+      merged.sort((a, b) => b.skill_score - a.skill_score);
+      setUsers(merged);
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [tab, user]);
+  }, [tab, user, community]);
 
   const podium = useMemo(() => users.slice(0, 3), [users]);
   const rest = useMemo(() => users.slice(3), [users]);
 
   return (
     <>
-      <TopBar title="Leaderboard" bell dm />
+      <TopBar
+        title="Leaderboard"
+        bell
+        dm
+        right={
+          <Link
+            to="/challenges"
+            className="inline-flex items-center gap-1 px-2.5 h-9 rounded-full glass-pill text-xs font-semibold hover:bg-white/10"
+          >
+            <Zap className="size-3.5 text-neon-400" />
+            Challenges
+          </Link>
+        }
+      />
 
       <div className="max-w-md mx-auto px-4 pt-2">
         {/* Tabs */}
-        <div className="relative flex p-1 glass rounded-2xl mb-4">
+        <div className="relative flex p-1 glass rounded-2xl mb-3">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -137,6 +171,34 @@ export default function Leaderboard() {
             </button>
           ))}
         </div>
+
+        {/* Community switcher (only on local tab) */}
+        {tab === "local" && (
+          <div className="mb-3 flex items-center gap-2 overflow-x-auto scrollbar-none -mx-4 px-4">
+            {COMMUNITIES.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setCommunity(c)}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold transition ${
+                  c.id === community.id
+                    ? "bg-gradient-electric text-graphite-900 shadow-glow"
+                    : "glass-pill text-ink-50"
+                }`}
+              >
+                <span>{c.emoji}</span>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === "local" && (
+          <div className="mb-3 flex items-center gap-2 text-xs text-ink-400">
+            <MapPin className="size-3.5 text-electric-400" />
+            Showing players in{" "}
+            <span className="text-ink-50 font-semibold">{community.region}</span>
+          </div>
+        )}
 
         {loading ? (
           <RowSkeleton count={8} />
@@ -162,13 +224,12 @@ export default function Leaderboard() {
 }
 
 function Podium({ users }) {
-  // Order on screen: 2nd, 1st, 3rd
   const [first, second, third] = users;
   const order = [second, first, third].filter(Boolean);
-  const heights = [128, 160, 112];
+  const heights = [128, 168, 112];
   const ranks = [2, 1, 3];
   return (
-    <div className="mt-2 mb-4 grid grid-cols-3 gap-2 items-end">
+    <div className="mt-2 mb-4 grid grid-cols-3 gap-2 items-end animate-fade-up">
       {order.map((u, i) => {
         const r = ranks[i];
         const h = heights[i];
@@ -256,7 +317,7 @@ function EmptyLeaderboard({ tab }) {
           ? "Follow some creators to see them here."
           : tab === "weekly"
           ? "No clips this week. Upload one to claim #1."
-          : "Be the first on the global board."}
+          : "Be the first on the board."}
       </p>
     </div>
   );

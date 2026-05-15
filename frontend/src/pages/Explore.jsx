@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, TrendingUp, Heart, MessageCircle } from "lucide-react";
+import { Search, TrendingUp, Heart, MessageCircle, MapPin, UserPlus } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import TopBar from "../components/TopBar";
+import Avatar from "../components/Avatar";
+import TierBadge from "../components/TierBadge";
 import { GridSkeleton } from "../components/Skeleton";
+import {
+  DEMO_VIDEOS,
+  DEMO_USERS,
+  COMMUNITIES,
+  mixDemo,
+} from "../demo/seed";
 
-const HASHTAGS = ["stalls", "flow", "freestyle", "battle", "trick", "newbie"];
+const HASHTAGS = ["stalls", "flow", "freestyle", "battle", "trick", "newbie", "squad", "challenge"];
 
 export default function Explore() {
   const [q, setQ] = useState("");
@@ -26,7 +34,8 @@ export default function Explore() {
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) setErr(error.message);
-      setVideos(data ?? []);
+      const merged = mixDemo(data ?? [], DEMO_VIDEOS, 40);
+      setVideos(merged);
       setLoading(false);
     })();
   }, []);
@@ -52,6 +61,8 @@ export default function Explore() {
       );
     return list;
   }, [trending, q, tag]);
+
+  const suggested = useMemo(() => DEMO_USERS.slice(0, 6), []);
 
   return (
     <>
@@ -95,16 +106,36 @@ export default function Explore() {
           ))}
         </div>
 
+        {/* Communities row */}
+        <h3 className="mt-5 mb-2 text-xs uppercase tracking-wider text-ink-400">
+          Communities
+        </h3>
+        <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 pb-1">
+          {COMMUNITIES.map((c) => (
+            <Link
+              key={c.id}
+              to="/leaderboard"
+              className="flex-shrink-0 inline-flex items-center gap-2 px-3 h-10 rounded-2xl glass hover:bg-white/10 active:scale-[0.99]"
+            >
+              <span className="text-base">{c.emoji}</span>
+              <div className="leading-tight">
+                <div className="text-sm font-semibold">{c.name}</div>
+                <div className="text-[10px] text-ink-400 flex items-center gap-1">
+                  <MapPin className="size-2.5" /> {c.region}
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
         {/* Trending banner */}
-        <div className="mt-4 rounded-2xl glass p-3 flex items-center gap-3">
+        <div className="mt-5 rounded-2xl glass p-3 flex items-center gap-3">
           <div className="size-10 rounded-xl bg-gradient-hot grid place-items-center shadow-glow-hot">
             <TrendingUp className="size-5 text-graphite-900" strokeWidth={3} />
           </div>
           <div>
             <div className="font-semibold">Trending now</div>
-            <div className="text-xs text-ink-400">
-              Sorted by likes + comments
-            </div>
+            <div className="text-xs text-ink-400">Sorted by likes + comments</div>
           </div>
         </div>
 
@@ -119,7 +150,7 @@ export default function Explore() {
             Nothing matches that search yet.
           </p>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-2 mb-6">
+          <div className="mt-4 grid grid-cols-2 gap-2">
             {filtered.map((v) => (
               <Link
                 key={v.id}
@@ -156,6 +187,43 @@ export default function Explore() {
             ))}
           </div>
         )}
+
+        {/* Suggested users */}
+        <h3 className="mt-6 mb-2 text-xs uppercase tracking-wider text-ink-400">
+          Suggested for you
+        </h3>
+        <div className="space-y-1.5 mb-6">
+          {suggested.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center gap-3 p-2.5 rounded-2xl glass"
+            >
+              <Link to={`/u/${u.username}`}>
+                <Avatar
+                  src={u.avatar_url}
+                  username={u.username}
+                  tier={u.rank_tier}
+                  size={44}
+                  ring
+                />
+              </Link>
+              <Link to={`/u/${u.username}`} className="flex-1 min-w-0">
+                <div className="font-semibold truncate">@{u.username}</div>
+                <div className="flex items-center gap-2 text-[11px] text-ink-400">
+                  <TierBadge tier={u.rank_tier} size="sm" />
+                  <span className="flex items-center gap-1">
+                    <MapPin className="size-3" />
+                    {u.region}
+                  </span>
+                </div>
+              </Link>
+              <button className="px-3 h-8 rounded-full bg-gradient-electric text-graphite-900 text-xs font-bold shadow-glow active:scale-95 flex items-center gap-1">
+                <UserPlus className="size-3.5" strokeWidth={3} />
+                Follow
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

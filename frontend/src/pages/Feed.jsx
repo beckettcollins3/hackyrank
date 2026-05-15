@@ -1,25 +1,38 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import VideoCard from "../components/VideoCard";
 import { VideoSkeleton } from "../components/Skeleton";
-import { Flame, Sparkles } from "lucide-react";
+import LiveActivityTicker from "../components/LiveActivityTicker";
+import { Flame, Sparkles, RefreshCw } from "lucide-react";
+import { DEMO_VIDEOS, mixDemo, isDemo } from "../demo/seed";
+import { useToast } from "../lib/ToastContext";
+import * as haptics from "../lib/haptics";
 
 const PAGE_SIZE = 15;
+const FEED_TARGET = 20;
+const PULL_THRESHOLD = 70;
 
 export default function Feed() {
   const { user } = useAuth();
-  const [videos, setVideos] = useState([]);
+  const toast = useToast();
+
+  const [realVideos, setRealVideos] = useState([]);
   const [likedIds, setLikedIds] = useState(new Set());
+  const [demoLiked, setDemoLiked] = useState(new Set());
+  const [demoCounts, setDemoCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const [muted, setMuted] = useState(true);
-  const [tab, setTab] = useState("foryou"); // "foryou" | "following"
+  const [tab, setTab] = useState("foryou");
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullY, setPullY] = useState(0);
   const scrollerRef = useRef(null);
+  const pullStartRef = useRef(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setErr("");
 
     let q = supabase
@@ -37,7 +50,7 @@ export default function Feed() {
         .eq("follower_id", user.id);
       const ids = (f ?? []).map((r) => r.following_id);
       if (ids.length === 0) {
-        setVideos([]);
+        setRealVideos([]);
         setLikedIds(new Set());
         setLoading(false);
         return;
@@ -46,14 +59,12 @@ export default function Feed() {
     }
 
     const { data, error } = await q;
-
     if (error) {
       setErr(error.message);
       setLoading(false);
       return;
     }
-
-    setVideos(data ?? []);
+    setRealVideos(data ?? []);
 
     if (user && data?.length) {
       const ids = data.map((v) => v.id);
@@ -73,7 +84,12 @@ export default function Feed() {
     load();
   }, [load]);
 
-  // Track which video is the active one via scroll
+  const videos = useMemo(() => {
+    if (tab === "following") return realVideos;
+    return mixDemo(realVideos, DEMO_VIDEOS, FEED_TARGET);
+  }, [realVideos, tab]);
+
+  // Active video tracking
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root) return;
@@ -93,24 +109,72 @@ export default function Feed() {
     return () => obs.disconnect();
   }, [videos]);
 
+  // Pull-to-refresh
+  const onScrollerTouchStart = (e) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (el.scrollTop <= 0) {
+      pullStartRef.current = e.touches[0].clientY;
+    }
+  };
+  const onScrollerTouchMove = (e) => {
+    if (pullStartRef.current == null) return;
+    const dy = e.touches[0].clientY - pullStartRef.current;
+    if (dy > 0) setPullY(Math.min(dy * 0.5, 100));
+  };
+  const onScrollerTouchEnd = async () => {
+    const should = pullY >= PULL_THRESHOLD;
+    setPullY(0);
+    pullStartRef.current = null;
+    if (should) {
+      setRefreshing(true);
+      haptics.light();
+      await load(true);
+      setRefreshing(false);
+      toast("Feed refreshed", { kind: "success" });
+    }
+  };
+
   const toggleLike = async (video) => {
-    if (!user) {
+    if (!user && !isDemo(video.id)) {
       window.location.href = "/login";
       return;
     }
+    haptics.pop();
+
+    if (isDemo(video.id)) {
+      const already = demoLiked.has(video.id);
+      setDemoLiked((prev) => {
+        const next = new Set(prev);
+        already ? next.delete(video.id) : next.add(video.id);
+        return next;
+      });
+      setDemoCounts((prev) => {
+        const cur =
+          prev[video.id] ?? { likes: video.likes_count, comments: video.comments_count };
+        return {
+          ...prev,
+          [video.id]: { ...cur, likes: cur.likes + (already ? -1 : 1) },
+        };
+      });
+      if (!already) toast("Liked", { kind: "like" });
+      return;
+    }
+
     const already = likedIds.has(video.id);
     setLikedIds((prev) => {
       const next = new Set(prev);
       already ? next.delete(video.id) : next.add(video.id);
       return next;
     });
-    setVideos((prev) =>
+    setRealVideos((prev) =>
       prev.map((v) =>
         v.id === video.id
           ? { ...v, likes_count: v.likes_count + (already ? -1 : 1) }
           : v
       )
     );
+    if (!already) toast("Liked", { kind: "like" });
     const op = already
       ? supabase
           .from("likes")
@@ -121,17 +185,30 @@ export default function Feed() {
           .from("likes")
           .insert({ user_id: user.id, video_id: video.id });
     const { error } = await op;
-    if (error) load();
+    if (error) load(true);
   };
+
+  const decorated = videos.map((v) => {
+    if (isDemo(v.id) && demoCounts[v.id]) {
+      return { ...v, likes_count: demoCounts[v.id].likes };
+    }
+    return v;
+  });
+
+  const isLiked = (id) => (isDemo(id) ? demoLiked.has(id) : likedIds.has(id));
+  const pullPct = Math.min(1, pullY / PULL_THRESHOLD);
 
   return (
     <div className="relative">
-      {/* Top floating segmented tabs */}
-      <div className="absolute top-0 inset-x-0 z-20 pt-[max(env(safe-area-inset-top),10px)] pb-2 pointer-events-none">
+      {/* Top floating segmented tabs + ticker */}
+      <div className="absolute top-0 inset-x-0 z-20 pt-[max(env(safe-area-inset-top),10px)] pb-2 pointer-events-none flex flex-col items-center gap-2">
         <div className="mx-auto max-w-md flex items-center justify-center gap-5 text-sm font-semibold pointer-events-auto">
           <button
-            onClick={() => setTab("following")}
-            className={`flex items-center gap-1 ${
+            onClick={() => {
+              haptics.tap();
+              setTab("following");
+            }}
+            className={`flex items-center gap-1 transition ${
               tab === "following" ? "text-white" : "text-white/60"
             }`}
           >
@@ -139,18 +216,34 @@ export default function Feed() {
           </button>
           <span className="size-1 rounded-full bg-white/30" />
           <button
-            onClick={() => setTab("foryou")}
-            className={`flex items-center gap-1 ${
+            onClick={() => {
+              haptics.tap();
+              setTab("foryou");
+            }}
+            className={`flex items-center gap-1 transition ${
               tab === "foryou" ? "text-white" : "text-white/60"
             }`}
           >
             <Flame className="size-4 text-hot" /> For You
           </button>
         </div>
-        {/* underline */}
-        <div className="mx-auto mt-1 h-0.5 w-10 rounded-full bg-white shadow-glow pointer-events-none"
-             style={{ marginLeft: tab === "foryou" ? "calc(50% + 24px)" : "calc(50% - 64px)" }} />
+        <LiveActivityTicker />
       </div>
+
+      {/* Pull-to-refresh indicator */}
+      {(pullY > 0 || refreshing) && (
+        <div
+          className="absolute inset-x-0 top-[max(env(safe-area-inset-top),10px)] z-10 grid place-items-center pointer-events-none"
+          style={{ transform: `translateY(${pullY}px)` }}
+        >
+          <div className="size-9 rounded-full glass-strong grid place-items-center">
+            <RefreshCw
+              className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+              style={{ transform: `rotate(${pullPct * 360}deg)` }}
+            />
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <VideoSkeleton />
@@ -161,20 +254,24 @@ export default function Feed() {
             <p className="text-sm text-ink-400">{err}</p>
           </div>
         </div>
-      ) : videos.length === 0 ? (
+      ) : decorated.length === 0 ? (
         <EmptyFeed tab={tab} />
       ) : (
         <div
           ref={scrollerRef}
           className="feed-scroller h-[100dvh] overflow-y-scroll"
+          onTouchStart={onScrollerTouchStart}
+          onTouchMove={onScrollerTouchMove}
+          onTouchEnd={onScrollerTouchEnd}
         >
-          {videos.map((v, i) => (
+          {decorated.map((v, i) => (
             <div key={v.id} data-feed-item data-idx={i}>
               <VideoCard
                 video={v}
-                liked={likedIds.has(v.id)}
+                liked={isLiked(v.id)}
                 onLike={() => toggleLike(v)}
                 active={i === activeIdx}
+                preload={i === activeIdx || i === activeIdx + 1 ? "auto" : "metadata"}
                 muted={muted}
                 setMuted={setMuted}
               />
@@ -191,7 +288,7 @@ function EmptyFeed({ tab }) {
     <div className="h-[100dvh] grid place-items-center p-6 text-center">
       <div className="space-y-4">
         <div className="mx-auto size-20 rounded-3xl bg-gradient-electric grid place-items-center shadow-glow">
-          <Flame className="size-9 text-graphite-900" />
+          <Sparkles className="size-9 text-graphite-900" />
         </div>
         <h2 className="text-2xl font-display font-bold">
           {tab === "following" ? "Nobody you follow yet" : "No clips yet"}

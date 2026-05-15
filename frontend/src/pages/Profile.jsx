@@ -18,24 +18,54 @@ import {
   Award,
   LogOut,
   Pencil,
+  MapPin,
+  Zap,
 } from "lucide-react";
+import {
+  userByUsername,
+  videosForUser,
+  isDemo,
+  DEMO_VIDEOS,
+} from "../demo/seed";
+import { useToast } from "../lib/ToastContext";
+import * as haptics from "../lib/haptics";
 
 export default function Profile() {
   const { username } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const { user: me, profile: myProfile, signOut, refreshProfile } = useAuth();
 
   const [profile, setProfile] = useState(null);
   const [videos, setVideos] = useState([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0, likes: 0 });
+  const [streak, setStreak] = useState(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState(false);
+  const demoMode = !!username && !!userByUsername(username);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
+
+    if (demoMode) {
+      const u = userByUsername(username);
+      setProfile(u);
+      const v = videosForUser(u.id);
+      setVideos(v);
+      const totalLikes = v.reduce((a, x) => a + (x.likes_count ?? 0), 0);
+      setCounts({
+        followers: Math.floor(u.skill_score / 12) + 8,
+        following: 24 + (u.skill_score % 41),
+        likes: totalLikes,
+      });
+      setStreak(Math.max(3, Math.floor(u.skill_score / 200) % 30 + 3));
+      setIsFollowing(false);
+      setLoading(false);
+      return;
+    }
 
     let target = null;
     if (username) {
@@ -88,6 +118,7 @@ export default function Profile() {
       following: following ?? 0,
       likes: totalLikes,
     });
+    setStreak(computeStreak(list));
 
     if (me && me.id !== target.id) {
       const { data: f } = await supabase
@@ -101,14 +132,26 @@ export default function Profile() {
       setIsFollowing(false);
     }
     setLoading(false);
-  }, [username, me, myProfile]);
+  }, [username, me, myProfile, demoMode]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const toggleFollow = async () => {
-    if (!me || !profile || me.id === profile.id) return;
+    if (!profile) return;
+    haptics.light();
+    if (demoMode || isDemo(profile.id)) {
+      const willFollow = !isFollowing;
+      setIsFollowing(willFollow);
+      setCounts((c) => ({
+        ...c,
+        followers: c.followers + (willFollow ? 1 : -1),
+      }));
+      if (willFollow) toast(`Following @${profile.username}`, { kind: "follow" });
+      return;
+    }
+    if (!me || me.id === profile.id) return;
     if (isFollowing) {
       setIsFollowing(false);
       setCounts((c) => ({ ...c, followers: Math.max(0, c.followers - 1) }));
@@ -120,6 +163,7 @@ export default function Profile() {
     } else {
       setIsFollowing(true);
       setCounts((c) => ({ ...c, followers: c.followers + 1 }));
+      toast(`Following @${profile.username}`, { kind: "follow" });
       await supabase
         .from("followers")
         .insert({ follower_id: me.id, following_id: profile.id });
@@ -144,7 +188,7 @@ export default function Profile() {
   }
   if (!profile) return null;
 
-  const isMe = me?.id === profile.id;
+  const isMe = !demoMode && me?.id === profile.id;
   const ts = tierStyle(profile.rank_tier);
   const next = nextTier(profile.rank_tier);
   const prog = progressToNext(profile.skill_score, profile.rank_tier);
@@ -176,7 +220,6 @@ export default function Profile() {
       </div>
 
       <div className="max-w-md mx-auto px-4 -mt-12 relative">
-        {/* Avatar + actions row */}
         <div className="flex items-end justify-between">
           <div className={`rounded-full p-1 ${ts.bg} ${ts.glow}`}>
             <Avatar
@@ -230,8 +273,18 @@ export default function Profile() {
           <h1 className="text-xl font-display font-bold tracking-tight">
             @{profile.username}
           </h1>
-          <div className="mt-1.5">
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
             <TierBadge tier={profile.rank_tier} size="md" />
+            {profile.region && (
+              <span className="inline-flex items-center gap-1 text-xs text-ink-400">
+                <MapPin className="size-3 text-electric-400" />
+                {profile.region}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 text-xs text-hot">
+              <Flame className="size-3 fill-hot" />
+              {streak} day streak
+            </span>
           </div>
           {profile.bio && (
             <p className="mt-3 text-[14.5px] text-ink-50/90 text-pretty">
@@ -272,6 +325,28 @@ export default function Profile() {
           </div>
         )}
 
+        {/* Quick stats row */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl glass p-3 flex items-center gap-3">
+            <div className="size-9 rounded-xl bg-gradient-electric/30 grid place-items-center">
+              <Heart className="size-4 text-hot fill-hot" />
+            </div>
+            <div>
+              <div className="text-sm font-bold tabular-nums">{counts.likes}</div>
+              <div className="text-[10.5px] text-ink-400 uppercase tracking-wide">Likes received</div>
+            </div>
+          </div>
+          <div className="rounded-2xl glass p-3 flex items-center gap-3">
+            <div className="size-9 rounded-xl bg-gradient-neon/30 grid place-items-center">
+              <Zap className="size-4 text-neon-400" />
+            </div>
+            <div>
+              <div className="text-sm font-bold tabular-nums">{streak}d</div>
+              <div className="text-[10.5px] text-ink-400 uppercase tracking-wide">Active streak</div>
+            </div>
+          </div>
+        </div>
+
         {/* Achievements */}
         <div className="mt-4">
           <h2 className="text-xs uppercase tracking-wider text-ink-400 mb-2">
@@ -302,6 +377,11 @@ export default function Profile() {
               unlocked={profile.rank_tier !== "Beginner"}
               icon={<MessageCircle className="size-5" />}
               label="Ranked Up"
+            />
+            <Achievement
+              unlocked={streak >= 7}
+              icon={<Zap className="size-5" />}
+              label="7d Streak"
             />
           </div>
         </div>
@@ -365,6 +445,30 @@ export default function Profile() {
       )}
     </>
   );
+}
+
+function computeStreak(videos) {
+  if (!videos?.length) return 0;
+  const days = new Set();
+  for (const v of videos) {
+    const d = new Date(v.created_at);
+    days.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+  }
+  let streak = 0;
+  const cursor = new Date();
+  for (let i = 0; i < 60; i++) {
+    const key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
+    if (days.has(key)) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else if (i === 0) {
+      // Allow 1-day gap for today
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
 }
 
 function Stat({ label, value, icon }) {

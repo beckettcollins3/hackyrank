@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, MessageCircle, Send, Music2, Volume2, VolumeX } from "lucide-react";
+import { Heart, MessageCircle, Send, Music2, Volume2, VolumeX, Check } from "lucide-react";
 import Avatar from "./Avatar";
 import TierBadge from "./TierBadge";
 import Comments from "./Comments";
+import FloatingHearts, { makeHeartBurst } from "./FloatingHearts";
+import { useToast } from "../lib/ToastContext";
+import * as haptics from "../lib/haptics";
 
 function formatCount(n) {
   if (n == null) return "0";
@@ -12,11 +15,22 @@ function formatCount(n) {
   return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
 }
 
-export default function VideoCard({ video, liked, onLike, active = true, muted, setMuted }) {
+export default function VideoCard({
+  video,
+  liked,
+  onLike,
+  active = true,
+  preload = "auto",
+  muted,
+  setMuted,
+}) {
   const ref = useRef(null);
+  const toast = useToast();
   const [showComments, setShowComments] = useState(false);
   const [pop, setPop] = useState(false);
-  const [bursts, setBursts] = useState([]); // {id, x, y}
+  const [bursts, setBursts] = useState([]);
+  const [floaters, setFloaters] = useState([]);
+  const [following, setFollowing] = useState(false);
   const lastTapRef = useRef(0);
 
   useEffect(() => {
@@ -40,20 +54,25 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
     if (ref.current) ref.current.muted = muted;
   }, [muted]);
 
-  const triggerLikeAnim = () => {
+  const triggerLikeAnim = (emitFloaters = false) => {
     setPop(true);
     setTimeout(() => setPop(false), 480);
+    if (emitFloaters) {
+      const next = makeHeartBurst();
+      setFloaters((prev) => [...prev, ...next]);
+    }
   };
 
   const handleLike = () => {
-    if (!liked) triggerLikeAnim();
+    const wasLiked = liked;
+    if (!wasLiked) triggerLikeAnim(true);
+    else triggerLikeAnim(false);
     onLike?.();
   };
 
   const onMediaTap = (e) => {
     const now = Date.now();
     if (now - lastTapRef.current < 280) {
-      // Double tap → like + burst at point
       const rect = e.currentTarget.getBoundingClientRect();
       const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left;
       const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top;
@@ -63,7 +82,7 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
         setBursts((b) => b.filter((p) => p.id !== id));
       }, 700);
       if (!liked) onLike?.();
-      triggerLikeAnim();
+      triggerLikeAnim(true);
     } else {
       const v = ref.current;
       if (v) (v.paused ? v.play() : v.pause()).catch?.(() => {});
@@ -75,33 +94,30 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
 
   return (
     <section className="snap-start relative h-[100dvh] w-full overflow-hidden bg-black">
-      {/* Media */}
       <video
         ref={ref}
         src={video.video_url}
         loop
         playsInline
-        preload="auto"
+        preload={preload}
         className="absolute inset-0 size-full object-cover"
         onClick={onMediaTap}
       />
 
-      {/* Top safe-area scrim */}
+      {/* Scrims */}
       <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none" />
 
-      {/* Top right mute toggle */}
+      {/* Top right mute */}
       <button
         onClick={() => setMuted?.((m) => !m)}
-        className="absolute top-[calc(env(safe-area-inset-top)+12px)] right-3 z-10 size-9 grid place-items-center rounded-full glass-pill active:scale-95"
+        className="absolute top-[calc(env(safe-area-inset-top)+44px)] right-3 z-10 size-9 grid place-items-center rounded-full glass-pill active:scale-95"
         aria-label={muted ? "Unmute" : "Mute"}
       >
         {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
       </button>
 
-      {/* Bottom scrim */}
-      <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none" />
-
-      {/* Overlay UI: user info + caption */}
+      {/* Overlay: user + caption */}
       <div className="absolute left-3 right-20 bottom-[calc(96px+env(safe-area-inset-bottom))] z-10 text-white animate-fade-up">
         {u && (
           <div className="flex items-center gap-2 mb-2">
@@ -114,8 +130,19 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
                 <TierBadge tier={u.rank_tier} size="sm" />
               </div>
             </Link>
-            <button className="ml-2 px-3 py-1 rounded-full bg-gradient-electric text-graphite-900 text-xs font-bold shadow-glow active:scale-95">
-              Follow
+            <button
+              onClick={() => {
+                haptics.light();
+                if (!following) toast(`Following @${u.username}`, { kind: "follow" });
+                setFollowing((v) => !v);
+              }}
+              className={`ml-2 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition flex items-center gap-1 ${
+                following
+                  ? "bg-graphite-700 text-ink-50"
+                  : "bg-gradient-electric text-graphite-900 shadow-glow"
+              }`}
+            >
+              {following ? <><Check className="size-3" strokeWidth={3} /> Following</> : "Follow"}
             </button>
           </div>
         )}
@@ -130,18 +157,26 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
         </div>
       </div>
 
-      {/* Side action rail */}
+      {/* Side rail */}
       <div className="absolute right-3 bottom-[calc(112px+env(safe-area-inset-bottom))] z-10 flex flex-col items-center gap-5 text-white">
-        <ActionButton
-          onClick={handleLike}
-          icon={
-            <Heart
-              className={`size-7 ${liked ? "fill-hot text-hot" : "fill-transparent"} ${pop ? "animate-pop-heart" : ""}`}
-              strokeWidth={2}
-            />
-          }
-          label={formatCount(video.likes_count)}
-        />
+        <div className="relative">
+          <ActionButton
+            onClick={handleLike}
+            icon={
+              <Heart
+                className={`size-7 ${liked ? "fill-hot text-hot" : "fill-transparent"} ${pop ? "animate-pop-heart" : ""}`}
+                strokeWidth={2}
+              />
+            }
+            label={formatCount(video.likes_count)}
+          />
+          <FloatingHearts
+            hearts={floaters}
+            onDone={(id) =>
+              setFloaters((prev) => prev.filter((h) => h.id !== id))
+            }
+          />
+        </div>
         <ActionButton
           onClick={() => setShowComments(true)}
           icon={<MessageCircle className="size-7" strokeWidth={2} />}
@@ -163,7 +198,7 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
         </div>
       </div>
 
-      {/* Double-tap heart bursts */}
+      {/* Double-tap bursts */}
       {bursts.map((b) => (
         <Heart
           key={b.id}
@@ -173,9 +208,12 @@ export default function VideoCard({ video, liked, onLike, active = true, muted, 
         />
       ))}
 
-      {/* Comments sheet */}
       {showComments && (
-        <Comments videoId={video.id} onClose={() => setShowComments(false)} />
+        <Comments
+          videoId={video.id}
+          fallbackVideo={video}
+          onClose={() => setShowComments(false)}
+        />
       )}
     </section>
   );

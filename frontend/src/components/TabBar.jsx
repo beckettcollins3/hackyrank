@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { Home, Compass, Trophy, User, Plus } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
+import * as haptics from "../lib/haptics";
 
 function Tab({ to, end, label, icon: Icon }) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={() => haptics.tap()}
       className={({ isActive }) =>
         `flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition ${
           isActive
@@ -41,7 +43,10 @@ export default function TabBar() {
 
           {/* Center FAB */}
           <button
-            onClick={() => navigate(session ? "/upload" : "/login")}
+            onClick={() => {
+              haptics.light();
+              navigate(session ? "/upload" : "/login");
+            }}
             className="relative -mt-5 mx-1 size-14 rounded-2xl bg-gradient-electric grid place-items-center shadow-glow active:scale-95 transition"
             aria-label="Upload"
           >
